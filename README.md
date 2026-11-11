@@ -163,8 +163,15 @@ the feature's own median input are flagged; saving assumes they could be
 trimmed to 2x the median, with removed tokens spread pro rata over the call's full-rate, cached and cache-write input, each at its own price. (b) Features whose
 median input:output ratio is at least 100 with median input of at least 2000
 tokens are flagged; the saving is an illustrative 25% of that feature's input
-spend, a placeholder and not a measurement. All thresholds are constants at
-the top of `analyses.py`.
+spend, a placeholder and not a measurement. If 80% or more of the feature's
+input tokens are cache reads, the finding is titled **long reused context**
+instead: that is an agent or long chat re-sending its history, and the lever
+is compacting the history, not trimming a prompt. All thresholds are constants
+at the top of `analyses.py`.
+
+Findings with an illustrative saving are marked "(illustrative)" and always
+rank after findings whose saving is computed from the log, so a placeholder
+cannot push a measured result down the list.
 
 **Model downgrade candidates** (low; needs a quality eval before switching).
 A feature and model with 20+ calls where 95% of outputs are 100 tokens or

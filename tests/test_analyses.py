@@ -107,3 +107,24 @@ def test_findings_sorted_and_unpriced_ignored(book):
     calls = _prefix_calls(n=20) + [mk(100 + i, inp=1000, out=1024, max_tokens=1024, feature="t") for i in range(5)]
     savings = [f.monthly_saving_usd for f in run_all(calls, book, 1.0)]
     assert savings == sorted(savings, reverse=True) and len(savings) >= 2
+
+
+def test_mostly_cached_input_is_reused_context_not_extreme_ratio(book):
+    # 90% of each call's input is a cache read: an agent re-sending its history.
+    calls = [mk(i, inp=500, out=10, cached_input_tokens=4500, feature="f") for i in range(20)]
+    (f,) = oversized_prompts(calls, book, 1.0)
+    assert f.kind == "reused_context" and f.illustrative
+    assert "90% of input tokens are cache reads" in f.evidence[-1]
+
+
+def test_illustrative_findings_rank_after_measured_ones(book):
+    # A large placeholder saving on 'agent' must not outrank a small measured
+    # duplicate saving on 'dup'.
+    calls = [mk(i, inp=50000, out=10, feature="agent") for i in range(20)]
+    calls += [mk(100 + i, inp=100, out=10, feature="dup", prompt_key="same") for i in range(3)]
+    findings = run_all(calls, book, 1.0)
+    assert [f.illustrative for f in findings] == sorted(f.illustrative for f in findings)
+    dup = next(f for f in findings if f.kind == "exact_duplicate")
+    guess = next(f for f in findings if f.illustrative)
+    assert dup.monthly_saving_usd < guess.monthly_saving_usd
+    assert findings.index(dup) < findings.index(guess)

@@ -216,14 +216,16 @@ def render_text(r: Report) -> str:
             add("  %-28s %10s %5.1f%%  %6d calls" % (key[:28], _usd(b["cost_usd"]), share, b["calls"]))
 
     add("")
-    add("FINDINGS (ranked by estimated monthly saving; estimates, not guarantees; they overlap, do not add them up)")
+    add("FINDINGS (ranked by estimated monthly saving, measured before illustrative; estimates, not guarantees; "
+        "they overlap, do not add them up)")
     add(_SCALE_NOTE % s.monthly_factor)
     add("-" * 60)
     if not r.findings:
         add("No findings.")
     for i, f in enumerate(r.findings, 1):
         add("%d. %s" % (i, f.title))
-        add("   Estimated saving: %s/month   Confidence: %s" % (_usd(f.monthly_saving_usd), f.confidence))
+        add("   Estimated saving: %s/month%s   Confidence: %s"
+            % (_usd(f.monthly_saving_usd), " (illustrative)" if f.illustrative else "", f.confidence))
         for e in f.evidence:
             add("   Evidence: " + e)
         for a in f.assumptions:
@@ -263,7 +265,8 @@ def render_markdown(r: Report) -> str:
     add("")
     add("## Findings")
     add("")
-    add("Ranked by estimated monthly saving. These are estimates, not guarantees, and they overlap: do not add them up.")
+    add("Ranked by estimated monthly saving, with measured savings before illustrative ones. "
+        "These are estimates, not guarantees, and they overlap: do not add them up.")
     add("")
     add(_SCALE_NOTE % s.monthly_factor)
     if not r.findings:
@@ -273,7 +276,8 @@ def render_markdown(r: Report) -> str:
         add("")
         add("### %d. %s" % (i, _md(f.title)))
         add("")
-        add("Estimated saving: **%s/month**. Confidence: **%s**." % (_usd(f.monthly_saving_usd), f.confidence))
+        add("Estimated saving: **%s/month**%s. Confidence: **%s**."
+            % (_usd(f.monthly_saving_usd), " (illustrative)" if f.illustrative else "", f.confidence))
         add("")
         add("Evidence:")
         for e in f.evidence:

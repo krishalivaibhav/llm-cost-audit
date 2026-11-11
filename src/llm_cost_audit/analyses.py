@@ -34,6 +34,8 @@ TRIM_TARGET_MULTIPLE = 2  # ...and assume they could be trimmed to 2x the median
 EXTREME_RATIO = 100  # median input:output ratio treated as extreme
 EXTREME_RATIO_MIN_INPUT = 2000  # ...only when prompts are also big
 ASSUMED_RATIO_TRIM = 0.25  # illustrative: 25% of input is trimmable
+REUSED_CONTEXT_SHARE = 0.8  # a feature whose input is >= 80% cache reads is
+# re-sending one growing context (agents, long chats), not a bloated prompt
 TINY_OUTPUT_P95 = 100  # p95 output tokens at or below this = "tiny outputs"
 RETRY_SHARE = 0.5  # assumed share of truncated calls that get retried
 
@@ -48,6 +50,9 @@ class Finding:
     monthly_saving_usd: float
     assumptions: List[str]
     confidence: str  # "low" | "medium" | "high"
+    # True when the saving is a placeholder, not computed from the log.
+    # Illustrative findings rank after every measured one.
+    illustrative: bool = False
 
 
 def _money(x: float) -> str:
@@ -281,20 +286,36 @@ def oversized_prompts(calls: List[Call], prices: PriceBook, factor: float) -> Li
         median_ratio = statistics.median(ratios)
         if median_ratio >= EXTREME_RATIO and median >= EXTREME_RATIO_MIN_INPUT:
             feature_input_cost = sum(input_cost(c, p) for c, p in priced)
+            # WHY split: an agent or long chat re-sends its whole history on
+            # every turn, mostly from cache. That looks like "huge prompt,
+            # tiny answer" but the fix is compacting the history, not
+            # trimming a prompt template, so the advice differs.
+            total_in = sum(c.total_input_tokens for c, _ in priced)
+            read_share = sum(c.cached_input_tokens for c, _ in priced) / total_in if total_in else 0.0
+            evidence = [
+                "Median call reads %d input tokens per output token (median input %d tokens)." % (median_ratio, median),
+                "Input spend for this feature: %s over the log period." % _money(feature_input_cost),
+            ]
+            if read_share >= REUSED_CONTEXT_SHARE:
+                kind, title = "reused_context", "Long reused context (agent or chat history): feature '%s'" % feature
+                evidence.append("%d%% of input tokens are cache reads: the same growing context is re-sent each call."
+                                % int(read_share * 100))
+                lever = ("ILLUSTRATIVE: assumes %d%% of the input could be removed by compacting or summarising "
+                         "older history. This is a placeholder, not a measurement." % int(ASSUMED_RATIO_TRIM * 100))
+                caveat = "Agents and long chats need much of their history; check what the model actually uses before cutting."
+            else:
+                kind, title = "extreme_ratio", "Extreme input:output ratio: feature '%s'" % feature
+                lever = ("ILLUSTRATIVE: assumes %d%% of the input could be removed (retrieval top-k, shorter history, "
+                         "pre-filtering). This is a placeholder, not a measurement." % int(ASSUMED_RATIO_TRIM * 100))
+                caveat = "Long input with short output is sometimes correct (e.g. classifying documents); this flags it for a human look."
             findings.append(Finding(
-                kind="extreme_ratio",
-                title="Extreme input:output ratio: feature '%s'" % feature,
-                evidence=[
-                    "Median call reads %d input tokens per output token (median input %d tokens)." % (median_ratio, median),
-                    "Input spend for this feature: %s over the log period." % _money(feature_input_cost),
-                ],
+                kind=kind,
+                title=title,
+                evidence=evidence,
                 monthly_saving_usd=_cap(ASSUMED_RATIO_TRIM * feature_input_cost, feature_input_cost) * factor,
-                assumptions=[
-                    "ILLUSTRATIVE: assumes %d%% of the input could be removed (retrieval top-k, shorter history, pre-filtering). This is a placeholder, not a measurement."
-                    % int(ASSUMED_RATIO_TRIM * 100),
-                    "Long input with short output is sometimes correct (e.g. classifying documents); this flags it for a human look.",
-                ],
+                assumptions=[lever, caveat],
                 confidence="low",
+                illustrative=True,
             ))
     return findings
 
@@ -387,12 +408,14 @@ def truncated_outputs(calls: List[Call], prices: PriceBook, factor: float) -> Li
 
 
 def run_all(calls: List[Call], prices: PriceBook, factor: float, show_snippets: bool = False) -> List[Finding]:
-    """Run every analysis and sort by estimated monthly saving, largest first."""
+    """Run every analysis and sort by estimated monthly saving, largest first,
+    with illustrative (placeholder) savings after all measured ones: a guess
+    must never push a figure computed from the log down the list."""
     findings: List[Finding] = []
     findings.extend(uncached_prefixes(calls, prices, factor))
     findings.extend(exact_duplicates(calls, prices, factor, show_snippets))
     findings.extend(oversized_prompts(calls, prices, factor))
     findings.extend(downgrade_candidates(calls, prices, factor))
     findings.extend(truncated_outputs(calls, prices, factor))
-    findings.sort(key=lambda f: f.monthly_saving_usd, reverse=True)
+    findings.sort(key=lambda f: (f.illustrative, -f.monthly_saving_usd))
     return findings
