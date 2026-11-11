@@ -1,0 +1,262 @@
+{
+  "_comment": "USD per million tokens. Verified by fetching the source_url on the as_of date. Prices change; check the source and use --prices to override.",
+  "models": {
+    "claude-fable-5-2": {
+      "provider": "anthropic",
+      "input": 8,
+      "output": 40,
+      "cache_read": 0.2,
+      "cache_write": 10,
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "as_of": "2026-11-11"
+    },
+    "claude-opus-5-5": {
+      "provider": "anthropic",
+      "input": 4,
+      "output": 20,
+      "cache_read": 0.2,
+      "cache_write": 5,
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "as_of": "2026-11-11"
+    },
+    "claude-sonnet-5-5": {
+      "provider": "anthropic",
+      "input": 2,
+      "output": 10,
+      "cache_read": 0.1,
+      "cache_write": 2.5,
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "as_of": "2026-11-11"
+    },
+    "claude-haiku-5-5": {
+      "provider": "anthropic",
+      "input": 0.1,
+      "output": 0.5,
+      "cache_read": 0.01,
+      "cache_write": 0.125,
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "as_of": "2026-11-11",
+      "note": "Price is for prompts up to 100,000 tokens; the page lists a higher tier above that, which this tool does not model. cache_write is the 5-minute write price."
+    },
+    "gpt-6.1-sol": {
+      "provider": "openai",
+      "input": 2,
+      "output": 10,
+      "cache_read": 0.1,
+      "cache_write": 2,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-6.1-terra": {
+      "provider": "openai",
+      "input": 1,
+      "output": 5,
+      "cache_read": 0.05,
+      "cache_write": 1,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-6-luna": {
+      "provider": "openai",
+      "input": 0.1,
+      "output": 0.5,
+      "cache_read": 0.01,
+      "cache_write": 0.1,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-6-sol": {
+      "provider": "openai",
+      "input": 2,
+      "output": 10,
+      "cache_read": 0.2,
+      "cache_write": 2,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-6-astra": {
+      "provider": "openai",
+      "input": 10,
+      "output": 50,
+      "cache_read": 1,
+      "cache_write": 10,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-5.6-sol": {
+      "provider": "openai",
+      "input": 4,
+      "output": 20,
+      "cache_read": 0.4,
+      "cache_write": 4,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-5.6-terra": {
+      "provider": "openai",
+      "input": 2,
+      "output": 12,
+      "cache_read": 0.2,
+      "cache_write": 2,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-5.6-luna": {
+      "provider": "openai",
+      "input": 0.2,
+      "output": 1.2,
+      "cache_read": 0.02,
+      "cache_write": 0.2,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-5.5": {
+      "provider": "openai",
+      "input": 5,
+      "output": 30,
+      "cache_read": 0.5,
+      "cache_write": 5,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-5.4": {
+      "provider": "openai",
+      "input": 2.5,
+      "output": 15,
+      "cache_read": 0.25,
+      "cache_write": 2.5,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-5.4-mini": {
+      "provider": "openai",
+      "input": 0.75,
+      "output": 4.5,
+      "cache_read": 0.075,
+      "cache_write": 0.75,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-5.4-nano": {
+      "provider": "openai",
+      "input": 0.2,
+      "output": 1.25,
+      "cache_read": 0.02,
+      "cache_write": 0.2,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-5.2": {
+      "provider": "openai",
+      "input": 1.75,
+      "output": 14,
+      "cache_read": 0.175,
+      "cache_write": 1.75,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-5.1": {
+      "provider": "openai",
+      "input": 1.25,
+      "output": 10,
+      "cache_read": 0.125,
+      "cache_write": 1.25,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-5": {
+      "provider": "openai",
+      "input": 1.25,
+      "output": 10,
+      "cache_read": 0.125,
+      "cache_write": 1.25,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-5-mini": {
+      "provider": "openai",
+      "input": 0.25,
+      "output": 2,
+      "cache_read": 0.025,
+      "cache_write": 0.25,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-5-nano": {
+      "provider": "openai",
+      "input": 0.05,
+      "output": 0.4,
+      "cache_read": 0.005,
+      "cache_write": 0.05,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-4.1": {
+      "provider": "openai",
+      "input": 2,
+      "output": 8,
+      "cache_read": 0.5,
+      "cache_write": 2,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-4.1-mini": {
+      "provider": "openai",
+      "input": 0.4,
+      "output": 1.6,
+      "cache_read": 0.1,
+      "cache_write": 0.4,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-4o": {
+      "provider": "openai",
+      "input": 2.5,
+      "output": 10,
+      "cache_read": 1.25,
+      "cache_write": 2.5,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "gpt-4o-mini": {
+      "provider": "openai",
+      "input": 0.15,
+      "output": 0.6,
+      "cache_read": 0.075,
+      "cache_write": 0.15,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    },
+    "o3": {
+      "provider": "openai",
+      "input": 2,
+      "output": 8,
+      "cache_read": 0.5,
+      "cache_write": 2,
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "as_of": "2026-11-11",
+      "note": "Standard tier, short context. OpenAI lists no separate cache-write fee, so cache_write equals input."
+    }
+  }
+}
