@@ -3,6 +3,7 @@
 import html
 import json
 import math
+from datetime import timedelta
 import os
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
@@ -43,8 +44,9 @@ def spend_breakdown(calls: List[Call], prices: PriceBook) -> SpendSummary:
 
     Projection = total priced cost / span_days * 30, where span_days is the
     number of CALENDAR days (UTC) the log covers, counting both end days, and
-    measured between the 1st and 99th percentile of timestamps so that one
-    corrupt timestamp (e.g. 0, meaning 1970) cannot stretch the span.
+    measured after trimming timestamps isolated by a long gap (see
+    _robust_span) so that one corrupt timestamp (e.g. 0, meaning 1970) cannot
+    stretch the span.
 
     Why calendar days: first-to-last-call time understates the period (14 days
     of traffic shows as ~13.4 days because traffic starts mid-morning on day 1
@@ -81,7 +83,7 @@ def spend_breakdown(calls: List[Call], prices: PriceBook) -> SpendSummary:
         span_days, ignored, full_days = _robust_span(stamps)
         if full_days - span_days >= max(1, 0.1 * span_days):
             warnings.append(
-                "%d outlier timestamps outside the 1st-99th percentile were ignored when measuring the span "
+                "%d outlier timestamps isolated from the rest of the log by a long gap were ignored when measuring the span "
                 "(they would have stretched it from %d to %d calendar days). Check the log for bad timestamps."
                 % (ignored, span_days, full_days))
         if span_days == 1:
@@ -100,14 +102,25 @@ def spend_breakdown(calls: List[Call], prices: PriceBook) -> SpendSummary:
 
 
 def _robust_span(stamps):
-    """(calendar days between 1st and 99th percentile, timestamps outside that
-    window, calendar days of the full range). `stamps` must be sorted and
-    have at least two entries. Nearest-rank percentiles."""
+    """(calendar days of the trimmed range, timestamps trimmed, calendar days
+    of the full range). `stamps` must be sorted and have at least two entries.
+
+    WHY: one wrong clock (a record stamped 1970, or next year) would stretch
+    the span to decades and shrink every monthly estimate to zero. A
+    percentile cut cannot drop a single bad stamp from a small log, so we
+    trim by gap instead: walking in from each end, a timestamp is dropped
+    while it sits further from its neighbour than a week or five times the
+    spread of the middle half of the data, whichever is larger. Real traffic
+    with ordinary quiet periods is left alone."""
     n = len(stamps)
-    lo = stamps[max(1, math.ceil(0.01 * n)) - 1]
-    hi = stamps[max(1, math.ceil(0.99 * n)) - 1]
-    ignored = sum(1 for t in stamps if t < lo or t > hi)
-    return ((hi.date() - lo.date()).days + 1, ignored,
+    q1, q3 = stamps[n // 4], stamps[(3 * n) // 4]
+    gap = max(timedelta(days=7), 5 * (q3 - q1))
+    lo, hi = 0, n - 1
+    while lo < hi and stamps[lo + 1] - stamps[lo] > gap:
+        lo += 1
+    while hi > lo and stamps[hi] - stamps[hi - 1] > gap:
+        hi -= 1
+    return ((stamps[hi].date() - stamps[lo].date()).days + 1, lo + (n - 1 - hi),
             (stamps[-1].date() - stamps[0].date()).days + 1)
 
 

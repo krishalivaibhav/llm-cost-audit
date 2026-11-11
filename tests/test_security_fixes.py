@@ -173,3 +173,13 @@ def test_11_span_counts_calendar_days(book):
 def test_12_zero_or_missing_max_tokens_is_not_truncation(limit):
     assert not mk(out=500, max_tokens=limit).truncated
     assert mk(out=500, max_tokens=500).truncated
+
+
+def test_single_bad_timestamp_in_small_log_does_not_stretch_span():
+    """A percentile cut cannot drop one bad stamp out of ~50; the gap trim must."""
+    from datetime import datetime, timezone
+    from llm_cost_audit.report import _robust_span
+    good = [datetime(2026, 10, 1 + i % 10, 10, tzinfo=timezone.utc) for i in range(50)]
+    stamps = sorted(good + [datetime(1970, 1, 1, tzinfo=timezone.utc)])
+    days, ignored, full = _robust_span(stamps)
+    assert days == 10 and ignored == 1 and full > 20000
