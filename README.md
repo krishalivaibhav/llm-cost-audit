@@ -109,9 +109,11 @@ model. Cost of a call:
 
 Savings are measured over the log's period and scaled to 30 days:
 `monthly = saving_in_log * 30 / span_days`. `span_days` is the number of UTC
-
-Timestamps separated from the rest of the log by a long gap (more than a week, or five times the spread of the middle half of the data) are left out of the span, with a warning, so one corrupt timestamp (say 0, i.e. 1970)
-cannot stretch it; the report warns when outliers were ignored. Calendar
+calendar days covered, counting both end days. Timestamps separated from the
+rest of the log by a long gap (more than a week, or five times the spread of
+the middle half of the data) are left out of the span, so one corrupt
+timestamp (say 0, i.e. 1970) cannot stretch it; the report warns when
+timestamps were ignored. Calendar
 days are used because first-to-last-call time understates the period (14
 days of traffic reads as about 13.4), which inflates projections. The
 opposite bias exists for short logs: 26 hours spanning two dates count as 2
