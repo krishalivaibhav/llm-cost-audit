@@ -13,14 +13,14 @@ Token convention (the single most common source of wrong cost numbers):
   input_tokens        = prompt tokens billed at the FULL input rate.
   cached_input_tokens = prompt tokens read from a prompt cache (cheap rate).
   cache_write_tokens  = prompt tokens written to a cache (write rate).
-These three are disjoint, so total prompt size is their sum.
+These three are disjoint, so total prompt size is their sum. Anthropic reports
+them disjoint already. OpenAI's `prompt_tokens` INCLUDES cached tokens, so the
+OpenAI adapter subtracts them.
   cache_write_1h_tokens = the part of cache_write_tokens written with a
                         1-hour lifetime. Anthropic bills those at 2x input
                         instead of 1.25x, so they need their own price.
                         It is a SUBSET of cache_write_tokens, not a fourth
-                        disjoint count. Anthropic reports
-them disjoint already. OpenAI's `prompt_tokens` INCLUDES cached tokens, so the
-OpenAI adapter subtracts them.
+                        disjoint count.
 """
 
 import hashlib
