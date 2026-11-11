@@ -21,15 +21,19 @@ OpenAI adapter subtracts them.
 import hashlib
 import json
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 MAX_LINE_BYTES = 1_000_000  # 1 MB. Real call records are far smaller.
 MAX_TEXT_CHARS = 80  # cap for tags/names/snippets kept for display
-PREFIX_CHARS = 2000  # how much of a bare prompt counts as its "prefix"
+PREFIX_CHARS = 4096  # how much of a bare prompt counts as its "prefix" (4096 chars ~ 1024 tokens,
+# the smallest prefix the prefix analysis will consider)
+MAX_TOKENS_VALUE = 10 ** 12  # sanity cap: no real call has a trillion tokens; bigger is corrupt
+# data, and unbounded numbers would overflow float maths or print as Infinity.
 
-_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]")
 
 
 def safe_text(value: Any, limit: int = MAX_TEXT_CHARS) -> str:
@@ -38,8 +42,16 @@ def safe_text(value: Any, limit: int = MAX_TEXT_CHARS) -> str:
     WHY: a log line is attacker-controllable. An ESC byte in a `feature` tag
     could rewrite the auditor's terminal; a megabyte tag could wreck a table.
     """
-    text = _CONTROL_CHARS.sub(" ", str(value))
+    text = strip_invisible(value)
     return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
+def strip_invisible(value: Any) -> str:
+    """Replace control characters and drop Unicode format characters (category
+    Cf: zero-width joiners, bidi overrides such as U+202E). Bidi overrides can
+    make text display reversed, e.g. disguising one name as another."""
+    text = _CONTROL_CHARS.sub(" ", str(value))
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
 
 
 @dataclass
@@ -73,7 +85,8 @@ class Call:
         """True if the call stopped because it hit its output limit."""
         if self.stop_reason in ("max_tokens", "length"):
             return True
-        return self.max_tokens is not None and self.output_tokens >= self.max_tokens
+        # A limit of 0 (or no limit recorded) means "unknown", not "everything truncated".
+        return bool(self.max_tokens) and self.output_tokens >= self.max_tokens
 
 
 @dataclass
@@ -93,10 +106,12 @@ def _as_int(value: Any, name: str) -> int:
     says "1000" (string) is probably not the shape we think it is."""
     if isinstance(value, bool):
         raise ValueError("%s must be a number" % name)
-    if isinstance(value, float) and value.is_integer():
+    if isinstance(value, float) and value.is_integer():  # False for inf/NaN
         value = int(value)
     if not isinstance(value, int) or value < 0:
         raise ValueError("%s must be a non-negative integer" % name)
+    if value > MAX_TOKENS_VALUE:
+        raise ValueError("%s is implausibly large (> %d)" % (name, MAX_TOKENS_VALUE))
     return value
 
 
@@ -281,7 +296,7 @@ def load_calls(path: str) -> LoadResult:
                 continue
             lines_read += 1
             try:
-                call = normalise(json.loads(raw.decode("utf-8", "replace")), line_no)
+                call = normalise(json.loads(raw.decode("utf-8-sig", "replace")), line_no)
             except (ValueError, KeyError, TypeError, RecursionError) as exc:
                 # json.JSONDecodeError is a ValueError subclass.
                 reject(line_no, safe_text(exc, 100))

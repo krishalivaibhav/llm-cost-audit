@@ -6,6 +6,7 @@ table is "unpriced" and is excluded from dollar figures.
 """
 
 import json
+import math
 import re
 from dataclasses import dataclass
 from importlib import resources
@@ -13,6 +14,8 @@ from typing import Dict, Optional
 
 from .records import Call
 
+MAX_PRICE = 1_000_000.0  # USD per million tokens; anything above is a typo, and huge
+# values could overflow to infinity in cost sums.
 _PRICE_FIELDS = ("input", "output", "cache_read", "cache_write")
 # Providers return dated names like "gpt-4o-2024-08-06"; the table lists the
 # base name. We retry once with a trailing date removed.
@@ -63,8 +66,9 @@ def parse_prices(data: dict) -> PriceBook:
             raise ValueError("price entry for %r is not an object" % name)
         for f in _PRICE_FIELDS:
             v = e.get(f)
-            if isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0:
-                raise ValueError("%s.%s must be a non-negative number" % (name, f))
+            if (isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
+                    or v < 0 or v > MAX_PRICE):
+                raise ValueError("%s.%s must be a finite number between 0 and %d" % (name, f, MAX_PRICE))
         entries[name] = Price(
             model=name,
             provider=str(e.get("provider", "unknown")),
@@ -87,6 +91,15 @@ def load_prices(path: Optional[str] = None) -> PriceBook:
         with open(path, "r", encoding="utf-8") as fh:
             text = fh.read()
     return parse_prices(json.loads(text))
+
+
+def input_cost(call: Call, price: Price) -> float:
+    """The prompt side of a call's cost, each token type at its OWN rate
+    (full input, cache read, cache write). Used wherever an analysis asks
+    "what did this call's input cost?"; pricing cached tokens at the full
+    rate would overstate."""
+    return (call.input_tokens * price.input + call.cached_input_tokens * price.cache_read
+            + call.cache_write_tokens * price.cache_write) / 1_000_000
 
 
 def call_cost(call: Call, price: Price) -> float:

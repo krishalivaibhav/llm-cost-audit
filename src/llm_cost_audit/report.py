@@ -2,13 +2,15 @@
 
 import html
 import json
+import math
+import os
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from typing import Dict, List, Optional
 
 from .analyses import Finding, run_all
 from .prices import PriceBook, call_cost
-from .records import Call, LoadResult
+from .records import Call, LoadResult, strip_invisible
 
 DAYS_PER_MONTH = 30  # projections use a flat 30-day month; stated in the report
 
@@ -22,7 +24,7 @@ class SpendSummary:
     by_feature: Dict[str, dict]
     by_day: Dict[str, dict]
     unpriced_models: Dict[str, dict]
-    span_days: Optional[float]  # None if fewer than two dated calls
+    span_days: Optional[int]  # calendar days covered (robust, see _robust_span); None if < 2 dated calls
     monthly_factor: float  # multiply log-period amounts by this for a 30-day month
     projected_monthly_usd: float
     warnings: List[str] = field(default_factory=list)
@@ -40,10 +42,19 @@ def spend_breakdown(calls: List[Call], prices: PriceBook) -> SpendSummary:
     """Where the money went, and a projection to 30 days.
 
     Projection = total priced cost / span_days * 30, where span_days is the
-    time between the earliest and latest timestamp. A log shorter than one
-    day is treated as one day (a few hours of traffic would otherwise be
-    extrapolated wildly), and the report says so. This is a straight-line
-    projection: it ignores growth, weekday/weekend swings and price changes.
+    number of CALENDAR days (UTC) the log covers, counting both end days, and
+    measured between the 1st and 99th percentile of timestamps so that one
+    corrupt timestamp (e.g. 0, meaning 1970) cannot stretch the span.
+
+    Why calendar days: first-to-last-call time understates the period (14 days
+    of traffic shows as ~13.4 days because traffic starts mid-morning on day 1
+    and stops before midnight on day 14), which inflates the projection.
+    Counting whole days removes that bias for logs that cover many days. The
+    opposite bias exists for SHORT logs: 26 hours spanning two dates count as
+    2 days, understating the projection. Trimming 1% at each end also drops
+    about 2% of calls from the span but not from the cost total, a small
+    upward bias. This is a straight-line projection: it ignores growth,
+    weekday/weekend swings and price changes.
     """
     by_model: Dict[str, dict] = {}
     by_feature: Dict[str, dict] = {}
@@ -64,22 +75,40 @@ def spend_breakdown(calls: List[Call], prices: PriceBook) -> SpendSummary:
         _bucket(by_day, c.timestamp.date().isoformat() if c.timestamp else "(no timestamp)", cost, c)
 
     warnings: List[str] = []
-    stamps = [c.timestamp for c in calls if c.timestamp]
-    span_days: Optional[float] = None
+    stamps = sorted(c.timestamp for c in calls if c.timestamp)
+    span_days: Optional[int] = None
     if len(stamps) >= 2:
-        span_days = (max(stamps) - min(stamps)).total_seconds() / 86400.0
-    effective = span_days if span_days is not None else 0.0
-    if effective < 1.0:
-        warnings.append(
-            "Log spans %s; projections treat it as a full day of traffic. Treat monthly figures as rough."
-            % ("under one day" if span_days is not None else "an unknown period (fewer than two timestamps)"))
-        effective = 1.0
+        span_days, ignored, full_days = _robust_span(stamps)
+        if full_days - span_days >= max(1, 0.1 * span_days):
+            warnings.append(
+                "%d outlier timestamps outside the 1st-99th percentile were ignored when measuring the span "
+                "(they would have stretched it from %d to %d calendar days). Check the log for bad timestamps."
+                % (ignored, span_days, full_days))
+        if span_days == 1:
+            warnings.append("Log covers a single calendar day; projections treat it as a full day of traffic. "
+                            "Treat monthly figures as rough.")
+    else:
+        warnings.append("Log has fewer than two timestamps; projections treat it as one day of traffic. "
+                        "Treat monthly figures as rough.")
+    effective = float(span_days or 1)
     factor = DAYS_PER_MONTH / effective
     if unpriced:
         warnings.append("%d calls use models missing from the price table (unpriced, excluded from all dollar figures): %s."
                         % (sum(u["calls"] for u in unpriced.values()), ", ".join(sorted(unpriced))))
     return SpendSummary(len(calls), priced_calls, total, by_model, by_feature, by_day, unpriced,
                         span_days, factor, total * factor, warnings)
+
+
+def _robust_span(stamps):
+    """(calendar days between 1st and 99th percentile, timestamps outside that
+    window, calendar days of the full range). `stamps` must be sorted and
+    have at least two entries. Nearest-rank percentiles."""
+    n = len(stamps)
+    lo = stamps[max(1, math.ceil(0.01 * n)) - 1]
+    hi = stamps[max(1, math.ceil(0.99 * n)) - 1]
+    ignored = sum(1 for t in stamps if t < lo or t > hi)
+    return ((hi.date() - lo.date()).days + 1, ignored,
+            (stamps[-1].date() - stamps[0].date()).days + 1)
 
 
 @dataclass
@@ -93,9 +122,9 @@ class Report:
     price_sources: List[dict]
 
 
-def build_report(source: str, loaded: LoadResult, prices: PriceBook) -> Report:
+def build_report(source: str, loaded: LoadResult, prices: PriceBook, show_snippets: bool = False) -> Report:
     summary = spend_breakdown(loaded.calls, prices)
-    findings = run_all(loaded.calls, prices, summary.monthly_factor)
+    findings = run_all(loaded.calls, prices, summary.monthly_factor, show_snippets)
     if loaded.undated:
         summary.warnings.append("%d calls had no usable timestamp (excluded from the day breakdown and span)." % loaded.undated)
     used = sorted(set(summary.by_model))
@@ -105,7 +134,8 @@ def build_report(source: str, loaded: LoadResult, prices: PriceBook) -> Report:
         sources.append({"model": m, "priced_as": p.model, "input": p.input, "output": p.output,
                         "cache_read": p.cache_read, "cache_write": p.cache_write,
                         "source_url": p.source_url, "as_of": p.as_of})
-    return Report(source, loaded.lines_read, loaded.malformed, [list(e) for e in loaded.malformed_examples],
+    # Only the file name goes in the report: an absolute path leaks usernames and directory layout.
+    return Report(strip_invisible(os.path.basename(source)), loaded.lines_read, loaded.malformed, [list(e) for e in loaded.malformed_examples],
                   summary, findings, sources)
 
 
@@ -120,10 +150,12 @@ def _md(text: str) -> str:
     """Escape text for Markdown/HTML-capable viewers. Log-derived strings
     (feature tags, prompt snippets) are untrusted: neutralise HTML and the
     characters that make links, code spans and table cells."""
-    text = html.escape(str(text), quote=True)
+    text = html.escape(strip_invisible(text), quote=True)
     for ch in "\\`*_[]|":
         text = text.replace(ch, "\\" + ch)
-    return text
+    # Break bare-URL auto-linking: "://" and "www." become HTML entities, which
+    # viewers render as the same text but do not turn into clickable links.
+    return text.replace("://", "&#58;//").replace("www.", "www&#46;")
 
 
 def _table_rows(table: Dict[str, dict], limit: Optional[int] = None):
@@ -141,7 +173,7 @@ def render_text(r: Report) -> str:
     add("Lines read: %d   Calls parsed: %d   Malformed (skipped): %d" % (r.lines_read, s.total_calls, r.malformed))
     for line_no, why in r.malformed_examples:
         add("  line %d: %s" % (line_no, why))
-    span = "unknown" if s.span_days is None else "%.1f days" % s.span_days
+    span = "unknown" if s.span_days is None else "%d calendar days" % s.span_days
     add("Log span: %s   Priced calls: %d of %d" % (span, s.priced_calls, s.total_calls))
     add("Spend in log: %s   Projected 30-day spend: %s (straight-line, x%.2f)"
         % (_usd(s.total_cost_usd), _usd(s.projected_monthly_usd), s.monthly_factor))
@@ -183,7 +215,7 @@ def render_markdown(r: Report) -> str:
     add("")
     add("- Source: `%s`" % r.source.replace("`", "'"))
     add("- Lines read: %d; calls parsed: %d; malformed (skipped): %d" % (r.lines_read, s.total_calls, r.malformed))
-    span = "unknown" if s.span_days is None else "%.1f days" % s.span_days
+    span = "unknown" if s.span_days is None else "%d calendar days" % s.span_days
     add("- Log span: %s; priced calls: %d of %d" % (span, s.priced_calls, s.total_calls))
     add("- Spend in log: **%s**; projected 30-day spend: **%s** (straight-line, x%.2f)"
         % (_usd(s.total_cost_usd), _usd(s.projected_monthly_usd), s.monthly_factor))
@@ -230,7 +262,8 @@ def render_markdown(r: Report) -> str:
 
 
 def render_json(r: Report) -> str:
-    return json.dumps(asdict(r), indent=2, sort_keys=False) + "\n"
+    # allow_nan=False makes json.dumps raise instead of ever writing Infinity/NaN.
+    return json.dumps(asdict(r), indent=2, sort_keys=False, allow_nan=False) + "\n"
 
 
 RENDERERS = {"text": render_text, "markdown": render_markdown, "json": render_json}

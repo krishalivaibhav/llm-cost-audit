@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Dict, List, Optional
 
-from .prices import PriceBook, call_cost
+from .prices import PriceBook, call_cost, input_cost
 from .records import Call
 
 # ---- tunable assumptions, all named so the report can quote them -------------
@@ -52,6 +52,13 @@ class Finding:
 
 def _money(x: float) -> str:
     return "$%.4f" % x if x < 1 else "$%.2f" % x
+
+
+def _cap(saving: float, actual_cost: float) -> float:
+    """A saving can never exceed what the calls involved actually cost, and
+    never be negative. Applied to every analysis as a last sanity check on
+    the arithmetic."""
+    return max(0.0, min(saving, actual_cost))
 
 
 def _percentile(values: List[int], q: float) -> float:
@@ -122,7 +129,7 @@ def uncached_prefixes(calls: List[Call], prices: PriceBook, factor: float) -> Li
 
         now_cost = len(group) * prefix_tokens * price.input / 1e6
         cached_cost = (writes * prefix_tokens * price.cache_write + reads * prefix_tokens * price.cache_read) / 1e6
-        saving = now_cost - cached_cost
+        saving = _cap(now_cost - cached_cost, sum(call_cost(c, price) for c in group))
         if saving <= 0:
             continue
 
@@ -157,13 +164,17 @@ def uncached_prefixes(calls: List[Call], prices: PriceBook, factor: float) -> Li
 # --------------------------------------------------------------- 3. duplicates
 
 
-def exact_duplicates(calls: List[Call], prices: PriceBook, factor: float) -> List[Finding]:
+def exact_duplicates(calls: List[Call], prices: PriceBook, factor: float,
+                     show_snippets: bool = False) -> List[Finding]:
     """Same model, same system prompt, same prompt, sent more than once.
 
     WHY: if the same question is asked repeatedly (FAQ bots, retries without
     idempotency keys, cron jobs re-running on unchanged data) a response cache
     answers repeats for free. Saving = the full cost of every repeat after the
     first call of each group.
+
+    Evidence shows the prompt's hash, not its text, unless show_snippets is
+    set: prompts often hold customer data, and an audit report gets forwarded.
 
     Limit: only valid when an identical prompt deserves an identical answer.
     Sampling-heavy features (brainstorming, temperature > 0 on purpose) do not
@@ -180,13 +191,16 @@ def exact_duplicates(calls: List[Call], prices: PriceBook, factor: float) -> Lis
         if price is None or len(group) < 2:
             continue
         group = sorted(group, key=lambda c: (c.timestamp is None, c.timestamp, c.line_no))
-        repeat_cost = sum(call_cost(c, price) for c in group[1:])
+        repeat_cost = _cap(sum(call_cost(c, price) for c in group[1:]), sum(call_cost(c, price) for c in group))
         f = per_feature.setdefault(group[0].feature, {"cost": 0.0, "repeats": 0, "groups": 0, "example": ""})
         f["cost"] += repeat_cost
         f["repeats"] += len(group) - 1
         f["groups"] += 1
-        if not f["example"] and group[0].snippet:
-            f["example"] = group[0].snippet
+        if not f["example"]:
+            if show_snippets and group[0].snippet:
+                f["example"] = "Example prompt start: %r" % group[0].snippet
+            else:
+                f["example"] = "Example prompt hash: %s" % group[0].prompt_key
 
     findings = []
     for feature, f in per_feature.items():
@@ -195,7 +209,7 @@ def exact_duplicates(calls: List[Call], prices: PriceBook, factor: float) -> Lis
         evidence = ["%d repeat calls across %d distinct repeated requests; repeats cost %s over the log period."
                     % (f["repeats"], f["groups"], _money(f["cost"]))]
         if f["example"]:
-            evidence.append("Example prompt start: %r" % f["example"])
+            evidence.append(f["example"])
         findings.append(Finding(
             kind="exact_duplicate",
             title="Exact duplicate requests: feature '%s'" % feature,
@@ -246,7 +260,10 @@ def oversized_prompts(calls: List[Call], prices: PriceBook, factor: float) -> Li
         limit = OUTLIER_MULTIPLE * median
         target = TRIM_TARGET_MULTIPLE * median
         outliers = [(c, p) for c, p in priced if c.total_input_tokens > limit]
-        excess_cost = sum((c.total_input_tokens - target) * p.input / 1e6 for c, p in outliers)
+        # Trimmed tokens are assumed to come off the call's input pro rata across its
+        # token types, so each type is priced at its own rate (cached tokens are cheap).
+        excess_cost = sum(_cap(input_cost(c, p) * (c.total_input_tokens - target) / c.total_input_tokens,
+                               call_cost(c, p)) for c, p in outliers)
         if outliers and excess_cost > 0:
             biggest = max(c.total_input_tokens for c, _ in outliers)
             findings.append(Finding(
@@ -255,13 +272,13 @@ def oversized_prompts(calls: List[Call], prices: PriceBook, factor: float) -> Li
                 evidence=[
                     "%d of %d calls have input > %dx the feature's median (%d tokens); largest is %d tokens."
                     % (len(outliers), len(priced), OUTLIER_MULTIPLE, median, biggest),
-                    "Tokens above %dx median cost %s over the log period at the full input rate."
+                    "Tokens above %dx median cost %s over the log period at their own rates."
                     % (TRIM_TARGET_MULTIPLE, _money(excess_cost)),
                 ],
                 monthly_saving_usd=excess_cost * factor,
                 assumptions=[
                     "Flagged calls could be trimmed to %dx the feature's median input without hurting results (unverified)." % TRIM_TARGET_MULTIPLE,
-                    "Excess tokens are priced at the model's full input rate, even if some were cached (may overstate).",
+                    "Removed tokens are assumed to come off pro rata across full-rate, cached and cache-write input, each at its own price.",
                     _scale_assumption(factor),
                 ],
                 confidence="low",
@@ -271,15 +288,15 @@ def oversized_prompts(calls: List[Call], prices: PriceBook, factor: float) -> Li
         ratios = [c.total_input_tokens / max(c.output_tokens, 1) for c, _ in priced]
         median_ratio = statistics.median(ratios)
         if median_ratio >= EXTREME_RATIO and median >= EXTREME_RATIO_MIN_INPUT:
-            input_cost = sum(c.input_tokens * p.input / 1e6 for c, p in priced)
+            feature_input_cost = sum(input_cost(c, p) for c, p in priced)
             findings.append(Finding(
                 kind="extreme_ratio",
                 title="Extreme input:output ratio: feature '%s'" % feature,
                 evidence=[
                     "Median call reads %d input tokens per output token (median input %d tokens)." % (median_ratio, median),
-                    "Full-rate input spend for this feature: %s over the log period." % _money(input_cost),
+                    "Input spend for this feature: %s over the log period." % _money(feature_input_cost),
                 ],
-                monthly_saving_usd=ASSUMED_RATIO_TRIM * input_cost * factor,
+                monthly_saving_usd=_cap(ASSUMED_RATIO_TRIM * feature_input_cost, feature_input_cost) * factor,
                 assumptions=[
                     "ILLUSTRATIVE: assumes %d%% of the input could be removed (retrieval top-k, shorter history, pre-filtering). This is a placeholder, not a measurement."
                     % int(ASSUMED_RATIO_TRIM * 100),
@@ -321,7 +338,8 @@ def downgrade_candidates(calls: List[Call], prices: PriceBook, factor: float) ->
             continue
         now = sum(call_cost(c, price) for c in group)
         then = sum(call_cost(c, cheap) for c in group)
-        if now - then <= 0:
+        saving = _cap(now - then, now)
+        if saving <= 0:
             continue
         findings.append(Finding(
             kind="downgrade_candidate",
@@ -330,7 +348,7 @@ def downgrade_candidates(calls: List[Call], prices: PriceBook, factor: float) ->
                 "%d calls on %s; 95%% of outputs are <= %d tokens." % (len(group), model, p95),
                 "Same tokens on %s would cost %s instead of %s over the log period." % (cheap.model, _money(then), _money(now)),
             ],
-            monthly_saving_usd=(now - then) * factor,
+            monthly_saving_usd=saving * factor,
             assumptions=[
                 "The cheaper model must do the job as well; the log says nothing about answer quality. Run an eval first.",
                 "Cheapest model = lowest (input price + output price) among %s models in the price table." % price.provider,
@@ -368,7 +386,7 @@ def truncated_outputs(calls: List[Call], prices: PriceBook, factor: float) -> Li
             kind="truncated_output",
             title="Truncated outputs (hit max_tokens): feature '%s'" % feature,
             evidence=evidence,
-            monthly_saving_usd=RETRY_SHARE * cost * factor,
+            monthly_saving_usd=_cap(RETRY_SHARE * cost, cost) * factor,
             assumptions=[
                 "%d%% of truncated calls are retried at about the same cost; the log does not show retries, so this is a guess." % int(RETRY_SHARE * 100),
                 "Saving is only realised if the limit is raised or the prompt asks for shorter answers; a higher limit also raises cost per call.",
@@ -379,13 +397,13 @@ def truncated_outputs(calls: List[Call], prices: PriceBook, factor: float) -> Li
     return findings
 
 
-ALL_ANALYSES = [uncached_prefixes, exact_duplicates, oversized_prompts, downgrade_candidates, truncated_outputs]
-
-
-def run_all(calls: List[Call], prices: PriceBook, factor: float) -> List[Finding]:
+def run_all(calls: List[Call], prices: PriceBook, factor: float, show_snippets: bool = False) -> List[Finding]:
     """Run every analysis and sort by estimated monthly saving, largest first."""
     findings: List[Finding] = []
-    for analysis in ALL_ANALYSES:
-        findings.extend(analysis(calls, prices, factor))
+    findings.extend(uncached_prefixes(calls, prices, factor))
+    findings.extend(exact_duplicates(calls, prices, factor, show_snippets))
+    findings.extend(oversized_prompts(calls, prices, factor))
+    findings.extend(downgrade_candidates(calls, prices, factor))
+    findings.extend(truncated_outputs(calls, prices, factor))
     findings.sort(key=lambda f: f.monthly_saving_usd, reverse=True)
     return findings

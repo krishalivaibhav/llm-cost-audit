@@ -14,15 +14,15 @@ def test_spend_breakdown_and_projection(book):
     assert s.total_cost_usd == __import__("pytest").approx(0.0055)
     assert s.by_model["big"]["cost_usd"] == __import__("pytest").approx(0.0045)
     assert set(s.by_day) == {"2026-01-01", "2026-01-03"}
-    assert s.span_days == 2.0 and s.monthly_factor == 15.0
-    assert s.projected_monthly_usd == __import__("pytest").approx(0.0825)
+    assert s.span_days == 3 and s.monthly_factor == 10.0  # calendar days: Jan 1, 2 and 3
+    assert s.projected_monthly_usd == __import__("pytest").approx(0.055)
     assert "mystery" in s.unpriced_models and s.priced_calls == 2
     assert any("unpriced" in w for w in s.warnings)
 
 
 def test_short_span_warns(book):
     s = spend_breakdown([mk(0), mk(1, secs=60)], book)
-    assert s.monthly_factor == 30.0 and any("under one day" in w for w in s.warnings)
+    assert s.monthly_factor == 30.0 and any("single calendar day" in w for w in s.warnings)
 
 
 def _prefix_calls(n=6, gap=10, **kw):

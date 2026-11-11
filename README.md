@@ -27,15 +27,15 @@ llm-cost-audit analyze sample.jsonl --format json --out report.json
 
 Run the tests with `pip install pytest && pytest`.
 
-Options: `analyze LOG [--format text|markdown|json] [--out FILE] [--prices FILE]`;
+Options: `analyze LOG [--format text|markdown|json] [--out FILE] [--prices FILE] [--show-snippets]` (`--out` may not be the log file itself);
 `sample --out FILE [--calls N] [--seed S]`. The sample data is entirely
 synthetic (generic feature names, invented prompts) and deterministic for a
 given seed.
 
 ## Input format
 
-JSONL: one call per line. Blank lines are ignored. Lines that are not valid
-JSON, are not a recognised shape, have bad token fields, or are longer than
+JSONL: one call per line. Blank lines are ignored. A leading UTF-8 byte-order mark is accepted. Lines that are not valid
+JSON, are not a recognised shape, have bad token fields (negative, non-numeric, or above 10^12), or are longer than
 1 MB are skipped and counted in the report; they never stop the run.
 
 ### Canonical shape
@@ -74,9 +74,12 @@ taken from `timestamp`, or `created_at` (Anthropic) / `created` (OpenAI unix
 seconds).
 
 Log content is treated as untrusted: nothing is evaluated or executed, no
-path is read from the log, free-text fields are stripped of control
-characters and length-capped, and Markdown output escapes HTML and Markdown
-syntax.
+path is read from the log, free-text fields are stripped of control and
+Unicode format characters (such as bidi overrides) and length-capped, and
+Markdown output escapes HTML and Markdown syntax and defuses bare URLs
+(`://` and `www.` are written as HTML entities so viewers do not auto-link
+them). Reports name the log by file name only, never its full path, and show
+prompt hashes rather than prompt text unless you pass `--show-snippets`.
 
 ## Prices
 
@@ -105,19 +108,27 @@ model. Cost of a call:
 ## What each estimate means, and its limits
 
 Savings are measured over the log's period and scaled to 30 days:
-`monthly = saving_in_log * 30 / span_days`. A log shorter than one day is
-treated as one day and the report warns about it. This assumes the log is
-representative of a normal month (no growth, no weekday/weekend pattern).
-Savings from different findings overlap, so do not add them up.
+`monthly = saving_in_log * 30 / span_days`. `span_days` is the number of UTC
+calendar days covered, counting both end days, measured between the 1st and
+99th percentile of timestamps so one corrupt timestamp (say 0, i.e. 1970)
+cannot stretch it; the report warns when outliers were ignored. Calendar
+days are used because first-to-last-call time understates the period (14
+days of traffic reads as about 13.4), which inflates projections. The
+opposite bias exists for short logs: 26 hours spanning two dates count as 2
+days, so the projection is understated. A single-day log is treated as one
+full day and the report warns. All this assumes the log is representative of
+a normal month (no growth, no weekday/weekend pattern). Every saving is
+capped at the actual cost of the calls it involves. Savings from different findings overlap, so do not add them up.
 
 **Spend breakdown.** Plain sums of the formula above by model, feature and
 UTC day. Projection is straight-line.
 
 **Uncached repeated prefix** (confidence: medium, low if timestamps are
 missing). Groups calls with the same model and the same `system_prompt` (or,
-without one, the same first 2000 characters of a long prompt), at least 5
+without one, the same first 4096 characters of a prompt at least that long), at least 5
 calls, none reporting cached tokens. Prefix size is estimated as characters
-divided by 4 (capped at the smallest call's input), and must be at least 1024
+divided by 4 (capped at the smallest call's input; a bare-prompt prefix is
+4096 chars, i.e. 1024 tokens), and must be at least 1024
 tokens. The calls are replayed in time order: the first call, and any call more
 than 300 seconds after the previous one, pays the cache-write price on the
 prefix; the rest pay the cache-read price. Saving is current prefix cost minus
@@ -127,13 +138,14 @@ by model; it assumes the shared text can be moved to the front of the prompt.
 If caching would cost more than it saves, no finding is produced.
 
 **Exact duplicates** (medium). Same model, same system prompt, same prompt
-(or `prompt_hash`) seen more than once. Saving is the full cost of every
+(or `prompt_hash`) seen more than once. Evidence shows the prompt hash (`--show-snippets` adds
+the first 80 characters). Saving is the full cost of every
 repeat after the first. Limits: only valid if an identical prompt should get
 the same answer; it ignores cache expiry and the cost of running a cache.
 
 **Oversized prompts** (low). Needs 20+ calls in a feature. (a) Calls above 4x
 the feature's own median input are flagged; saving assumes they could be
-trimmed to 2x the median, priced at the full input rate. (b) Features whose
+trimmed to 2x the median, with removed tokens spread pro rata over the call's full-rate, cached and cache-write input, each at its own price. (b) Features whose
 median input:output ratio is at least 100 with median input of at least 2000
 tokens are flagged; the saving is an illustrative 25% of that feature's input
 spend, a placeholder and not a measurement. All thresholds are constants at
@@ -161,7 +173,7 @@ retries, so that share is a guess.
 - It does not model batch discounts, long-context price tiers, fine-tuned
   models, image/audio tokens, or tool-use surcharges.
 - It does not read prompt text beyond hashing it and keeping an 80-character
-  snippet for evidence lines.
+  snippet in memory, which is only shown with `--show-snippets`.
 - It does not guarantee any saving. Estimates can be wrong in either
   direction.
 
