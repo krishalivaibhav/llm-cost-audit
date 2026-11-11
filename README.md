@@ -48,6 +48,7 @@ JSON, are not a recognised shape, have bad token fields (negative, non-numeric, 
 | `timestamp` | no | ISO 8601. Without it a call is excluded from the day breakdown and the time span |
 | `cached_input_tokens` | no | Prompt tokens read from a cache |
 | `cache_write_tokens` | no | Prompt tokens written to a cache |
+| `cache_write_1h_tokens` | no | The part of `cache_write_tokens` written with a 1-hour lifetime (billed at a higher rate) |
 | `feature` | no | Your own tag (which part of the product made the call). Default `(untagged)` |
 | `prompt`, `prompt_hash` | no | Prompt text, or a hash of it, used to find exact duplicates |
 | `system_prompt` | no | Used to find repeated prefixes |
@@ -55,7 +56,8 @@ JSON, are not a recognised shape, have bad token fields (negative, non-numeric, 
 | `latency_ms`, `request_id` | no | Kept, not currently analysed |
 
 **Important:** `input_tokens`, `cached_input_tokens` and `cache_write_tokens`
-must not overlap. Total prompt size is their sum.
+must not overlap. Total prompt size is their sum. `cache_write_1h_tokens` is
+the exception: it is a part of `cache_write_tokens`, not added to it.
 
 ### Raw provider shapes (auto-detected per line)
 
@@ -85,12 +87,19 @@ prompt hashes rather than prompt text unless you pass `--show-snippets`.
 
 `src/llm_cost_audit/prices.json` holds USD per million tokens for input,
 output, cache read and cache write, plus `source_url` and `as_of` for each
-model. Cost of a call:
+model. Claude models also have `cache_write_1h`, the 1-hour cache-write price
+(2x input, against 1.25x for the default 5-minute write). Cost of a call:
 
 ```
 (input_tokens*input + cached_input_tokens*cache_read
- + cache_write_tokens*cache_write + output_tokens*output) / 1,000,000
+ + (cache_write_tokens - cache_write_1h_tokens)*cache_write
+ + cache_write_1h_tokens*cache_write_1h + output_tokens*output) / 1,000,000
 ```
+
+If a model has no `cache_write_1h` price, its 1-hour writes are priced at
+`cache_write` and the report prints a warning, because that understates cost.
+The Anthropic adapter reads the 1-hour count from
+`usage.cache_creation.ephemeral_1h_input_tokens`.
 
 - Models not in the table are reported as **unpriced** and left out of every
   dollar figure. Dated names like `gpt-4o-2024-08-06` are matched to the base

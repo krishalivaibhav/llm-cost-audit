@@ -43,3 +43,31 @@ def test_prices_override_file(tmp_path):
     f = tmp_path / "p.json"
     f.write_text(json.dumps({"models": {"x": {"input": 1, "output": 2, "cache_read": 0.1, "cache_write": 1}}}))
     assert load_prices(str(f)).get("x").output == 2
+
+
+def test_one_hour_writes_use_their_own_price():
+    # 'big' has cache_write 3.75 and no 1-hour price; add one at 6.0 (2x input).
+    entry = {"input": 3, "output": 15, "cache_read": 0.3, "cache_write": 3.75, "cache_write_1h": 6}
+    price = parse_prices({"models": {"m": entry}}).get("m")
+    # 400 written: 100 at the 5-minute rate, 300 at the 1-hour rate.
+    # (100*3.75 + 300*6) / 1e6 = (375 + 1800) / 1e6
+    c = mk(inp=0, out=0, cache_write_tokens=400, cache_write_1h_tokens=300)
+    assert call_cost(c, price) == pytest.approx(0.002175)
+
+
+def test_missing_one_hour_price_falls_back_to_write_price(book):
+    c = mk(inp=0, out=0, cache_write_tokens=400, cache_write_1h_tokens=300)
+    assert call_cost(c, book.get("big")) == pytest.approx(400 * 3.75 / 1e6)
+
+
+def test_invalid_one_hour_price_rejected():
+    with pytest.raises(ValueError):
+        parse_prices({"models": {"m": {"input": 1, "output": 1, "cache_read": 0, "cache_write": 0,
+                                       "cache_write_1h": "2"}}})
+
+
+def test_shipped_anthropic_one_hour_price_is_twice_input():
+    # The pricing page lists every Claude model's 1-hour write at exactly 2x input.
+    for p in load_prices().entries.values():
+        if p.provider == "anthropic":
+            assert p.cache_write_1h == 2 * p.input, p.model

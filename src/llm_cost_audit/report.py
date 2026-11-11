@@ -140,12 +140,17 @@ def build_report(source: str, loaded: LoadResult, prices: PriceBook, show_snippe
     findings = run_all(loaded.calls, prices, summary.monthly_factor, show_snippets)
     if loaded.undated:
         summary.warnings.append("%d calls had no usable timestamp (excluded from the day breakdown and span)." % loaded.undated)
+    unpriced_1h = sorted({c.model for c in loaded.calls if c.cache_write_1h_tokens and prices.get(c.model)
+                          and prices.get(c.model).cache_write_1h is None})
+    if unpriced_1h:
+        summary.warnings.append("1-hour cache writes on models with no 1-hour write price are priced at the "
+                                "5-minute rate, which may understate cost: %s." % ", ".join(unpriced_1h))
     used = sorted(set(summary.by_model))
     sources = []
     for m in used:
         p = prices.get(m)
         sources.append({"model": m, "priced_as": p.model, "input": p.input, "output": p.output,
-                        "cache_read": p.cache_read, "cache_write": p.cache_write,
+                        "cache_read": p.cache_read, "cache_write": p.cache_write, "cache_write_1h": p.cache_write_1h,
                         "source_url": p.source_url, "as_of": p.as_of})
     # Only the file name goes in the report: an absolute path leaks usernames and directory layout.
     return Report(strip_invisible(os.path.basename(source)), loaded.lines_read, loaded.malformed, [list(e) for e in loaded.malformed_examples],
@@ -157,6 +162,10 @@ def build_report(source: str, loaded: LoadResult, prices: PriceBook, show_snippe
 
 def _usd(x: float) -> str:
     return "$%.2f" % x if abs(x) >= 0.01 or x == 0 else "$%.4f" % x
+
+
+def _or_dash(price: Optional[float]) -> str:
+    return "-" if price is None else str(price)
 
 
 def _md(text: str) -> str:
@@ -222,8 +231,9 @@ def render_text(r: Report) -> str:
         add("")
     add("PRICES USED (USD per million tokens)")
     for p in r.price_sources:
-        add("  %s: in %s, out %s, cache read %s, cache write %s (checked %s, %s)"
-            % (p["model"], p["input"], p["output"], p["cache_read"], p["cache_write"], p["as_of"], p["source_url"]))
+        add("  %s: in %s, out %s, cache read %s, cache write %s, 1-hour cache write %s (checked %s, %s)"
+            % (p["model"], p["input"], p["output"], p["cache_read"], p["cache_write"], _or_dash(p["cache_write_1h"]),
+               p["as_of"], p["source_url"]))
     return "\n".join(out) + "\n"
 
 
@@ -275,11 +285,12 @@ def render_markdown(r: Report) -> str:
     add("")
     add("## Prices used (USD per million tokens)")
     add("")
-    add("| Model | Input | Output | Cache read | Cache write | Checked | Source |")
-    add("|---|---:|---:|---:|---:|---|---|")
+    add("| Model | Input | Output | Cache read | Cache write | 1-hour cache write | Checked | Source |")
+    add("|---|---:|---:|---:|---:|---:|---|---|")
     for p in r.price_sources:
-        add("| %s | %s | %s | %s | %s | %s | %s |" % (_md(p["model"]), p["input"], p["output"], p["cache_read"],
-                                                      p["cache_write"], _md(p["as_of"]), _md(p["source_url"])))
+        add("| %s | %s | %s | %s | %s | %s | %s | %s |" % (_md(p["model"]), p["input"], p["output"], p["cache_read"],
+                                                           p["cache_write"], _or_dash(p["cache_write_1h"]),
+                                                           _md(p["as_of"]), _md(p["source_url"])))
     return "\n".join(out) + "\n"
 
 

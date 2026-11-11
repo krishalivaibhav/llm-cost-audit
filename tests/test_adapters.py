@@ -80,3 +80,18 @@ def test_missing_timestamp_is_kept_but_counted(tmp_path):
     p.write_text(json.dumps({"model": "m", "input_tokens": 1, "output_tokens": 1, "timestamp": "garbage"}) + "\n")
     r = load_calls(str(p))
     assert len(r.calls) == 1 and r.undated == 1
+
+
+def test_anthropic_one_hour_writes_are_kept():
+    c = normalise({"model": "claude-x",
+                   "usage": {"input_tokens": 2, "output_tokens": 10, "cache_read_input_tokens": 0,
+                             "cache_creation_input_tokens": 500,
+                             "cache_creation": {"ephemeral_5m_input_tokens": 200, "ephemeral_1h_input_tokens": 300}}})
+    assert (c.cache_write_tokens, c.cache_write_1h_tokens) == (500, 300)
+    assert c.total_input_tokens == 502  # the 1-hour part is inside the 500, not added on top
+
+
+def test_one_hour_writes_cannot_exceed_total_writes():
+    with pytest.raises(ValueError):
+        normalise({"model": "m", "input_tokens": 1, "output_tokens": 1,
+                   "cache_write_tokens": 100, "cache_write_1h_tokens": 101})

@@ -13,7 +13,12 @@ Token convention (the single most common source of wrong cost numbers):
   input_tokens        = prompt tokens billed at the FULL input rate.
   cached_input_tokens = prompt tokens read from a prompt cache (cheap rate).
   cache_write_tokens  = prompt tokens written to a cache (write rate).
-These three are disjoint, so total prompt size is their sum. Anthropic reports
+These three are disjoint, so total prompt size is their sum.
+  cache_write_1h_tokens = the part of cache_write_tokens written with a
+                        1-hour lifetime. Anthropic bills those at 2x input
+                        instead of 1.25x, so they need their own price.
+                        It is a SUBSET of cache_write_tokens, not a fourth
+                        disjoint count. Anthropic reports
 them disjoint already. OpenAI's `prompt_tokens` INCLUDES cached tokens, so the
 OpenAI adapter subtracts them.
 """
@@ -66,6 +71,7 @@ class Call:
     timestamp: Optional[datetime] = None
     cached_input_tokens: int = 0
     cache_write_tokens: int = 0
+    cache_write_1h_tokens: int = 0  # subset of cache_write_tokens
     feature: str = "(untagged)"
     prompt_key: Optional[str] = None  # identity of system+prompt, for duplicates
     prefix_key: Optional[str] = None  # identity of the shared leading text
@@ -201,6 +207,7 @@ def _from_canonical(obj: Dict[str, Any], line_no: int) -> Call:
         output_tokens=_as_int(obj.get("output_tokens"), "output_tokens"),
         cached_input_tokens=_as_int(obj.get("cached_input_tokens") or 0, "cached_input_tokens"),
         cache_write_tokens=_as_int(obj.get("cache_write_tokens") or 0, "cache_write_tokens"),
+        cache_write_1h_tokens=_as_int(obj.get("cache_write_1h_tokens") or 0, "cache_write_1h_tokens"),
         stop_reason=safe_text(stop, 40) if isinstance(stop, str) else None,
         **_common(obj, line_no)
     )
@@ -208,8 +215,12 @@ def _from_canonical(obj: Dict[str, Any], line_no: int) -> Call:
 
 def _from_anthropic(obj: Dict[str, Any], line_no: int) -> Call:
     """Anthropic Messages response: usage.input_tokens already EXCLUDES cache
-    reads and cache writes, so the fields map across one-to-one."""
+    reads and cache writes, so the fields map across one-to-one.
+    usage.cache_creation splits the writes by cache lifetime (5 minutes or
+    1 hour); we keep the 1-hour part because it is billed at a higher rate."""
     usage = obj["usage"]
+    by_ttl = usage.get("cache_creation")
+    write_1h = by_ttl.get("ephemeral_1h_input_tokens") if isinstance(by_ttl, dict) else 0
     stop = obj.get("stop_reason")
     return Call(
         timestamp=parse_timestamp(obj.get("timestamp", obj.get("created_at"))),
@@ -217,6 +228,7 @@ def _from_anthropic(obj: Dict[str, Any], line_no: int) -> Call:
         output_tokens=_as_int(usage.get("output_tokens"), "usage.output_tokens"),
         cached_input_tokens=_as_int(usage.get("cache_read_input_tokens") or 0, "cache_read_input_tokens"),
         cache_write_tokens=_as_int(usage.get("cache_creation_input_tokens") or 0, "cache_creation_input_tokens"),
+        cache_write_1h_tokens=_as_int(write_1h or 0, "ephemeral_1h_input_tokens"),
         stop_reason=safe_text(stop, 40) if isinstance(stop, str) else None,
         **_common(obj, line_no)
     )
@@ -255,12 +267,18 @@ def normalise(obj: Any, line_no: int = 0) -> Call:
         raise ValueError("line is not a JSON object")
     usage = obj.get("usage")
     if isinstance(usage, dict) and "prompt_tokens" in usage:
-        return _from_openai(obj, line_no)
-    if isinstance(usage, dict) and "input_tokens" in usage and "input_tokens" not in obj:
-        return _from_anthropic(obj, line_no)
-    if "input_tokens" in obj:
-        return _from_canonical(obj, line_no)
-    raise ValueError("unrecognised record shape")
+        call = _from_openai(obj, line_no)
+    elif isinstance(usage, dict) and "input_tokens" in usage and "input_tokens" not in obj:
+        call = _from_anthropic(obj, line_no)
+    elif "input_tokens" in obj:
+        call = _from_canonical(obj, line_no)
+    else:
+        raise ValueError("unrecognised record shape")
+    # The 1-hour writes are part of the total written; more than the total
+    # would make the 5-minute remainder negative and the cost wrong.
+    if call.cache_write_1h_tokens > call.cache_write_tokens:
+        raise ValueError("1-hour cache-write tokens exceed total cache-write tokens")
+    return call
 
 
 def load_calls(path: str) -> LoadResult:

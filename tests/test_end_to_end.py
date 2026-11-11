@@ -55,3 +55,12 @@ def test_cli_errors(tmp_path, capsys):
     bad_prices = tmp_path / "p.json"
     bad_prices.write_text("{not json")
     assert main(["analyze", str(empty), "--prices", str(bad_prices)]) == 2
+
+
+def test_warns_when_one_hour_writes_have_no_price(tmp_path):
+    log = tmp_path / "w.jsonl"
+    rec = {"model": "gpt-4o", "input_tokens": 1, "output_tokens": 1,
+           "cache_write_tokens": 100, "cache_write_1h_tokens": 100}
+    log.write_text(json.dumps(rec) + "\n")
+    report = build_report("x", load_calls(str(log)), load_prices())
+    assert any("1-hour" in w and "gpt-4o" in w for w in report.summary.warnings)

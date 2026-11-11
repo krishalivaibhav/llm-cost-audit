@@ -33,6 +33,9 @@ class Price:
     source_url: str
     as_of: str
     note: str = ""
+    # Price of a 1-hour cache write. None when the provider lists none; 1-hour
+    # tokens are then priced at cache_write and the report warns about it.
+    cache_write_1h: Optional[float] = None
 
 
 class PriceBook:
@@ -64,7 +67,8 @@ def parse_prices(data: dict) -> PriceBook:
     for name, e in models.items():
         if not isinstance(e, dict):
             raise ValueError("price entry for %r is not an object" % name)
-        for f in _PRICE_FIELDS:
+        optional = ("cache_write_1h",) if "cache_write_1h" in e else ()
+        for f in _PRICE_FIELDS + optional:
             v = e.get(f)
             if (isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
                     or v < 0 or v > MAX_PRICE):
@@ -79,6 +83,7 @@ def parse_prices(data: dict) -> PriceBook:
             source_url=str(e.get("source_url", "")),
             as_of=str(e.get("as_of", "")),
             note=str(e.get("note", "")),
+            cache_write_1h=float(e["cache_write_1h"]) if optional else None,
         )
     return PriceBook(entries)
 
@@ -93,13 +98,21 @@ def load_prices(path: Optional[str] = None) -> PriceBook:
     return parse_prices(json.loads(text))
 
 
+def write_cost_units(call: Call, price: Price) -> float:
+    """Cache writes in token*price units: the 5-minute part at cache_write,
+    the 1-hour part at cache_write_1h (or cache_write if none is listed)."""
+    rate_1h = price.cache_write if price.cache_write_1h is None else price.cache_write_1h
+    write_5m = call.cache_write_tokens - call.cache_write_1h_tokens
+    return write_5m * price.cache_write + call.cache_write_1h_tokens * rate_1h
+
+
 def input_cost(call: Call, price: Price) -> float:
     """The prompt side of a call's cost, each token type at its OWN rate
     (full input, cache read, cache write). Used wherever an analysis asks
     "what did this call's input cost?"; pricing cached tokens at the full
     rate would overstate."""
     return (call.input_tokens * price.input + call.cached_input_tokens * price.cache_read
-            + call.cache_write_tokens * price.cache_write) / 1_000_000
+            + write_cost_units(call, price)) / 1_000_000
 
 
 def call_cost(call: Call, price: Price) -> float:
@@ -107,7 +120,8 @@ def call_cost(call: Call, price: Price) -> float:
 
         cost = ( input_tokens        * input
                + cached_input_tokens * cache_read
-               + cache_write_tokens  * cache_write
+               + 5-minute writes     * cache_write
+               + 1-hour writes       * cache_write_1h
                + output_tokens       * output ) / 1,000,000
 
     Reasoning/thinking tokens are assumed to be already inside output_tokens,
@@ -116,6 +130,6 @@ def call_cost(call: Call, price: Price) -> float:
     return (
         call.input_tokens * price.input
         + call.cached_input_tokens * price.cache_read
-        + call.cache_write_tokens * price.cache_write
+        + write_cost_units(call, price)
         + call.output_tokens * price.output
     ) / 1_000_000

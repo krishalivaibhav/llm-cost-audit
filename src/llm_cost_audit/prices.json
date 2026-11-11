@@ -7,6 +7,7 @@
       "output": 40,
       "cache_read": 0.2,
       "cache_write": 10,
+      "cache_write_1h": 16,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11"
     },
@@ -16,6 +17,7 @@
       "output": 20,
       "cache_read": 0.2,
       "cache_write": 5,
+      "cache_write_1h": 8,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11"
     },
@@ -25,6 +27,7 @@
       "output": 10,
       "cache_read": 0.1,
       "cache_write": 2.5,
+      "cache_write_1h": 4,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11"
     },
@@ -34,9 +37,10 @@
       "output": 0.5,
       "cache_read": 0.01,
       "cache_write": 0.125,
+      "cache_write_1h": 0.2,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11",
-      "note": "Price is for prompts up to 100,000 tokens; the page lists a higher tier above that, which this tool does not model. cache_write is the 5-minute write price."
+      "note": "Price is for prompts up to 100,000 tokens; the page lists a higher tier above that, which this tool does not model. cache_write is the 5-minute write price; cache_write_1h the 1-hour one."
     },
     "claude-fable-5-1": {
       "provider": "anthropic",
@@ -44,9 +48,10 @@
       "output": 50,
       "cache_read": 0.25,
       "cache_write": 12.5,
+      "cache_write_1h": 20,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11",
-      "note": "Cache reads are 0.025x input on this model. cache_write is the 5-minute write price."
+      "note": "Cache reads are 0.025x input on this model. cache_write is the 5-minute write price; cache_write_1h the 1-hour one."
     },
     "claude-fable-5": {
       "provider": "anthropic",
@@ -54,9 +59,10 @@
       "output": 50,
       "cache_read": 1,
       "cache_write": 12.5,
+      "cache_write_1h": 20,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11",
-      "note": "cache_write is the 5-minute write price."
+      "note": "cache_write is the 5-minute write price; cache_write_1h the 1-hour one."
     },
     "claude-opus-5": {
       "provider": "anthropic",
@@ -64,9 +70,10 @@
       "output": 25,
       "cache_read": 0.5,
       "cache_write": 6.25,
+      "cache_write_1h": 10,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11",
-      "note": "cache_write is the 5-minute write price."
+      "note": "cache_write is the 5-minute write price; cache_write_1h the 1-hour one."
     },
     "claude-opus-4-8": {
       "provider": "anthropic",
@@ -74,9 +81,10 @@
       "output": 25,
       "cache_read": 0.5,
       "cache_write": 6.25,
+      "cache_write_1h": 10,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11",
-      "note": "cache_write is the 5-minute write price."
+      "note": "cache_write is the 5-minute write price; cache_write_1h the 1-hour one."
     },
     "claude-opus-4-7": {
       "provider": "anthropic",
@@ -84,9 +92,10 @@
       "output": 25,
       "cache_read": 0.5,
       "cache_write": 6.25,
+      "cache_write_1h": 10,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11",
-      "note": "cache_write is the 5-minute write price."
+      "note": "cache_write is the 5-minute write price; cache_write_1h the 1-hour one."
     },
     "claude-opus-4-6": {
       "provider": "anthropic",
@@ -94,9 +103,10 @@
       "output": 25,
       "cache_read": 0.5,
       "cache_write": 6.25,
+      "cache_write_1h": 10,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11",
-      "note": "cache_write is the 5-minute write price."
+      "note": "cache_write is the 5-minute write price; cache_write_1h the 1-hour one."
     },
     "claude-opus-4-5": {
       "provider": "anthropic",
@@ -104,9 +114,10 @@
       "output": 25,
       "cache_read": 0.5,
       "cache_write": 6.25,
+      "cache_write_1h": 10,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11",
-      "note": "cache_write is the 5-minute write price."
+      "note": "cache_write is the 5-minute write price; cache_write_1h the 1-hour one."
     },
     "claude-opus-4-1": {
       "provider": "anthropic",
@@ -114,9 +125,10 @@
       "output": 75,
       "cache_read": 1.5,
       "cache_write": 18.75,
+      "cache_write_1h": 30,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11",
-      "note": "Retired on the Claude API; still offered on some cloud platforms. cache_write is the 5-minute write price."
+      "note": "Retired on the Claude API; still offered on some cloud platforms. cache_write is the 5-minute write price; cache_write_1h the 1-hour one."
     },
     "claude-opus-4": {
       "provider": "anthropic",
@@ -124,9 +136,10 @@
       "output": 75,
       "cache_read": 1.5,
       "cache_write": 18.75,
+      "cache_write_1h": 30,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11",
-      "note": "Retired on the Claude API; still offered on some cloud platforms. cache_write is the 5-minute write price."
+      "note": "Retired on the Claude API; still offered on some cloud platforms. cache_write is the 5-minute write price; cache_write_1h the 1-hour one."
     },
     "claude-sonnet-5": {
       "provider": "anthropic",
@@ -134,9 +147,10 @@
       "output": 10,
       "cache_read": 0.2,
       "cache_write": 2.5,
+      "cache_write_1h": 4,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11",
-      "note": "The $2/$10 launch price became the standard price; the planned rise to $3/$15 was cancelled. cache_write is the 5-minute write price."
+      "note": "The $2/$10 launch price became the standard price; the planned rise to $3/$15 was cancelled. cache_write is the 5-minute write price; cache_write_1h the 1-hour one."
     },
     "claude-sonnet-4-6": {
       "provider": "anthropic",
@@ -144,9 +158,10 @@
       "output": 15,
       "cache_read": 0.3,
       "cache_write": 3.75,
+      "cache_write_1h": 6,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11",
-      "note": "cache_write is the 5-minute write price."
+      "note": "cache_write is the 5-minute write price; cache_write_1h the 1-hour one."
     },
     "claude-sonnet-4-5": {
       "provider": "anthropic",
@@ -154,9 +169,10 @@
       "output": 15,
       "cache_read": 0.3,
       "cache_write": 3.75,
+      "cache_write_1h": 6,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11",
-      "note": "cache_write is the 5-minute write price."
+      "note": "cache_write is the 5-minute write price; cache_write_1h the 1-hour one."
     },
     "claude-sonnet-4": {
       "provider": "anthropic",
@@ -164,9 +180,10 @@
       "output": 15,
       "cache_read": 0.3,
       "cache_write": 3.75,
+      "cache_write_1h": 6,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11",
-      "note": "Retired on the Claude API; still offered on some cloud platforms. cache_write is the 5-minute write price."
+      "note": "Retired on the Claude API; still offered on some cloud platforms. cache_write is the 5-minute write price; cache_write_1h the 1-hour one."
     },
     "claude-haiku-4-5": {
       "provider": "anthropic",
@@ -174,9 +191,10 @@
       "output": 5,
       "cache_read": 0.1,
       "cache_write": 1.25,
+      "cache_write_1h": 2,
       "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
       "as_of": "2026-11-11",
-      "note": "cache_write is the 5-minute write price."
+      "note": "cache_write is the 5-minute write price; cache_write_1h the 1-hour one."
     },
     "gpt-6.1-sol": {
       "provider": "openai",
