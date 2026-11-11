@@ -95,8 +95,12 @@ model. Cost of a call:
 - Models not in the table are reported as **unpriced** and left out of every
   dollar figure. Dated names like `gpt-4o-2024-08-06` are matched to the base
   name by removing the date suffix; nothing else is fuzzy-matched.
-- OpenAI lists no separate cache-write fee, so `cache_write` equals `input`
-  there.
+- OpenAI's GPT-6 and GPT-5.6 models list a 30-minute cache-write price
+  (1.25x input), which the table uses. The cache replay below assumes a
+  5-minute lifetime, so for these models it counts more writes than a
+  30-minute cache would, and the caching saving comes out on the low side.
+  Older OpenAI models list no separate cache-write fee, so `cache_write`
+  equals `input` there.
 - Claude Haiku 5.5 has a higher price tier for prompts over 100,000 tokens.
   The table holds the lower tier only.
 - Only models whose prices and API IDs were checked on the provider pages are
