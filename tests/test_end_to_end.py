@@ -34,6 +34,10 @@ def test_end_to_end_on_sample(tmp_path, capsys):
     assert main(["analyze", str(log), "--format", "markdown", "--out", str(out)]) == 0
     assert out.read_text().startswith("# LLM cost audit")
 
+    # The 30-day scaling applies to every finding, so it is stated once, not per finding.
+    for rendered in (render_text(report), render_markdown(report)):
+        assert rendered.count("to a 30-day month") == 1
+
 
 def test_markdown_escapes_untrusted_text(tmp_path):
     log = tmp_path / "evil.jsonl"

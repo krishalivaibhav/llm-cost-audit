@@ -176,6 +176,12 @@ def _table_rows(table: Dict[str, dict], limit: Optional[int] = None):
     return rows[:limit] if limit else rows
 
 
+# Every finding's saving is scaled the same way, so the report says it once
+# here instead of repeating it in each finding's assumptions.
+_SCALE_NOTE = ("Savings measured over the log period are scaled by %.2f to a 30-day month "
+               "(assumes the log's traffic is representative).")
+
+
 def render_text(r: Report) -> str:
     s = r.summary
     out: List[str] = []
@@ -202,6 +208,7 @@ def render_text(r: Report) -> str:
 
     add("")
     add("FINDINGS (ranked by estimated monthly saving; estimates, not guarantees; they overlap, do not add them up)")
+    add(_SCALE_NOTE % s.monthly_factor)
     add("-" * 60)
     if not r.findings:
         add("No findings.")
@@ -247,6 +254,8 @@ def render_markdown(r: Report) -> str:
     add("## Findings")
     add("")
     add("Ranked by estimated monthly saving. These are estimates, not guarantees, and they overlap: do not add them up.")
+    add("")
+    add(_SCALE_NOTE % s.monthly_factor)
     if not r.findings:
         add("")
         add("No findings.")

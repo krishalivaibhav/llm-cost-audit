@@ -75,11 +75,6 @@ def _by_feature(calls: List[Call]) -> Dict[str, List[Call]]:
     return groups
 
 
-def _scale_assumption(factor: float) -> str:
-    return ("Saving measured over the log period is scaled by %.2f to a 30-day month "
-            "(assumes the log's traffic is representative)." % factor)
-
-
 # ----------------------------------------------------------------- 2. prefixes
 
 
@@ -141,8 +136,7 @@ def uncached_prefixes(calls: List[Call], prices: PriceBook, factor: float) -> Li
             % CACHE_TTL_SECONDS,
             "Prices used: input %s, cache write %s, cache read %s per million tokens (%s)."
             % (price.input, price.cache_write, price.cache_read, model),
-            "Assumes the provider caches this prefix (minimum cacheable size varies by model) and that you can put the shared text first.",
-            _scale_assumption(factor),
+            "The provider caches this prefix (minimum cacheable size varies by model) and that you can put the shared text first.",
         ]
         if undated:
             assumptions.append("%d calls had no timestamp and were assumed to be cache hits (optimistic)." % undated)
@@ -220,7 +214,6 @@ def exact_duplicates(calls: List[Call], prices: PriceBook, factor: float,
                 "Identical prompt (and system prompt) on the same model should get a reusable answer; "
                 "this fails for features that want varied outputs.",
                 "Ignores cache expiry/invalidation and the cost of running a cache.",
-                _scale_assumption(factor),
             ],
             confidence="medium",
         ))
@@ -279,7 +272,6 @@ def oversized_prompts(calls: List[Call], prices: PriceBook, factor: float) -> Li
                 assumptions=[
                     "Flagged calls could be trimmed to %dx the feature's median input without hurting results (unverified)." % TRIM_TARGET_MULTIPLE,
                     "Removed tokens are assumed to come off pro rata across full-rate, cached and cache-write input, each at its own price.",
-                    _scale_assumption(factor),
                 ],
                 confidence="low",
             ))
@@ -301,7 +293,6 @@ def oversized_prompts(calls: List[Call], prices: PriceBook, factor: float) -> Li
                     "ILLUSTRATIVE: assumes %d%% of the input could be removed (retrieval top-k, shorter history, pre-filtering). This is a placeholder, not a measurement."
                     % int(ASSUMED_RATIO_TRIM * 100),
                     "Long input with short output is sometimes correct (e.g. classifying documents); this flags it for a human look.",
-                    _scale_assumption(factor),
                 ],
                 confidence="low",
             ))
@@ -353,7 +344,6 @@ def downgrade_candidates(calls: List[Call], prices: PriceBook, factor: float) ->
                 "The cheaper model must do the job as well; the log says nothing about answer quality. Run an eval first.",
                 "Cheapest model = lowest (input price + output price) among %s models in the price table." % price.provider,
                 "Token counts stay the same on the new model (tokenizers differ, so real counts will move a little).",
-                _scale_assumption(factor),
             ],
             confidence="low",
         ))
@@ -390,7 +380,6 @@ def truncated_outputs(calls: List[Call], prices: PriceBook, factor: float) -> Li
             assumptions=[
                 "%d%% of truncated calls are retried at about the same cost; the log does not show retries, so this is a guess." % int(RETRY_SHARE * 100),
                 "Saving is only realised if the limit is raised or the prompt asks for shorter answers; a higher limit also raises cost per call.",
-                _scale_assumption(factor),
             ],
             confidence="low",
         ))
